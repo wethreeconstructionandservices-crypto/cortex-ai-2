@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
   KeyRound, Loader2, Plus, Check, Zap, Users, TrendingUp,
-  Calendar, Copy, Sparkles, Crown, Rocket, X, Clock,
+  Calendar, Copy, Sparkles, Crown, Rocket, X, Clock, CheckCircle2,
 } from 'lucide-react';
 import { supabase, type License } from '@/lib/supabase';
-import { adminLicensePlans, type AdminLicense } from '@/data/adminMockData';
+import {
+  adminLicensePlans, type AdminLicense,
+  licensePlanConfigs, licenseDurationOptions,
+  saasFeatureMatrix,
+} from '@/data/adminMockData';
 import { useAdminCurrency } from '@/context/AdminCurrencyContext';
 
 const planColors = {
@@ -13,19 +17,11 @@ const planColors = {
   amber: { text: 'text-neon-amber', border: 'border-neon-amber/30', bg: 'bg-neon-amber/10', glow: '' },
 };
 
-const tierConfig = [
-  { id: 'Basic', label: 'Basic', icon: Zap, color: 'cyan', price: 29, botLimit: 2, maxLev: 20 },
-  { id: 'Pro', label: 'Pro', icon: Rocket, color: 'green', price: 99, botLimit: 8, maxLev: 50 },
-  { id: 'Premium', label: 'Premium', icon: Crown, color: 'amber', price: 499, botLimit: 25, maxLev: 100 },
-] as const;
-
-const durationOptions = [
-  { id: 1, label: '1 Month', months: 1 },
-  { id: 2, label: '2 Months', months: 2 },
-  { id: 3, label: '3 Months', months: 3 },
-  { id: 6, label: '6 Months', months: 6 },
-  { id: 12, label: '1 Year', months: 12 },
-];
+const tierIconMap: Record<string, typeof Zap> = {
+  Starter: Zap,
+  Pro: Rocket,
+  Enterprise: Crown,
+};
 
 function randomKey(tier: string): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -35,7 +31,7 @@ function randomKey(tier: string): string {
 }
 
 export default function AdminLicenses() {
-  const { formatCurrency, symbol } = useAdminCurrency();
+  const { formatCurrency, symbol, currency } = useAdminCurrency();
   const [licenses, setLicenses] = useState<License[]>([]);
   const [loading, setLoading] = useState(true);
   const [showGenerate, setShowGenerate] = useState(false);
@@ -43,6 +39,7 @@ export default function AdminLicenses() {
   // Generate modal state
   const [selectedTier, setSelectedTier] = useState<string>('Pro');
   const [selectedDuration, setSelectedDuration] = useState<number>(3);
+  const [customAmount, setCustomAmount] = useState<number>(0);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,6 +53,14 @@ export default function AdminLicenses() {
   useEffect(() => {
     fetchLicenses();
   }, []);
+
+  // Auto-fill default amount when tier or duration changes
+  useEffect(() => {
+    const tier = licensePlanConfigs.find(t => t.id === selectedTier);
+    if (tier) {
+      setCustomAmount(tier.monthlyPrice * selectedDuration);
+    }
+  }, [selectedTier, selectedDuration]);
 
   const toggleActive = async (id: string, current: boolean) => {
     setLicenses(prev => prev.map(l => l.id === id ? { ...l, is_active: !current } : l));
@@ -77,7 +82,7 @@ export default function AdminLicenses() {
   const handleSaveLicense = async () => {
     if (!generatedKey) return;
     setSaving(true);
-    const tier = tierConfig.find(t => t.id === selectedTier)!;
+    const tier = licensePlanConfigs.find(t => t.id === selectedTier)!;
     const now = new Date();
     const validUntil = new Date(now);
     validUntil.setMonth(validUntil.getMonth() + selectedDuration);
@@ -88,13 +93,23 @@ export default function AdminLicenses() {
       is_active: true,
       valid_from: now.toISOString(),
       valid_until: validUntil.toISOString(),
-      monthly_fee: tier.price,
+      monthly_fee: tier.monthlyPrice,
       license_key: generatedKey,
     }).select('*');
 
     if (data) {
       setLicenses(prev => [data[0] as License, ...prev]);
     }
+
+    // Also record a transaction
+    await supabase.from('transactions').insert({
+      client_name: 'New License',
+      plan_name: selectedTier,
+      amount: customAmount,
+      currency: 'USD',
+      status: 'completed',
+      payment_method: 'Manual Assignment',
+    });
 
     setSaving(false);
     setShowGenerate(false);
@@ -114,6 +129,8 @@ export default function AdminLicenses() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-neon-cyan animate-spin" /></div>;
   }
 
+  const convertedAmount = currency === 'INR' ? customAmount * 83 : customAmount;
+
   return (
     <div className="space-y-5 animate-slide-up">
       {/* Header */}
@@ -122,13 +139,13 @@ export default function AdminLicenses() {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <KeyRound className="w-5 h-5 text-neon-cyan" /> Licenses
           </h2>
-          <p className="text-sm text-slate-400">Subscription plans, license generation, and validity tracking</p>
+          <p className="text-sm text-slate-400">Subscription plans, license generation, and SaaS feature matrix</p>
         </div>
         <button
           onClick={openGenerate}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:neon-glow-cyan text-sm font-semibold transition-all"
         >
-          <Plus className="w-4 h-4" /> Generate New License
+          <Plus className="w-4 h-4" /> Generate & Allot License
         </button>
       </div>
 
@@ -147,12 +164,12 @@ export default function AdminLicenses() {
                   </span>
                 </div>
                 <p className="text-3xl font-bold text-white mb-1">
-                  {symbol}{plan.price}<span className="text-sm text-slate-500 font-normal">/mo</span>
+                  {symbol}{currency === 'INR' ? (plan.price * 83) : plan.price}<span className="text-sm text-slate-500 font-normal">/mo</span>
                 </p>
                 <div className="flex items-center gap-4 mt-4 mb-4">
                   <div className="flex items-center gap-1.5">
                     <Zap className={`w-4 h-4 ${a.text}`} />
-                    <span className="text-sm text-slate-300">{plan.botLimit} bots</span>
+                    <span className="text-sm text-slate-300">{plan.botLimit === 25 ? 'Unlimited' : `${plan.botLimit}`} bots</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <TrendingUp className={`w-4 h-4 ${a.text}`} />
@@ -238,7 +255,7 @@ export default function AdminLicenses() {
       {showGenerate && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
           <div className="absolute inset-0 bg-base-900/85 backdrop-blur-md" onClick={() => setShowGenerate(false)} />
-          <div className="relative w-full max-w-xl animate-scale-in">
+          <div className="relative w-full max-w-2xl animate-scale-in">
             <div className="glass-strong neon-glow-cyan max-h-[92vh] overflow-y-auto scrollbar-thin rounded-2xl">
               {/* Header */}
               <div className="sticky top-0 bg-base-800/90 backdrop-blur-xl border-b border-white/[0.06] px-5 sm:px-6 py-4 flex items-center justify-between">
@@ -247,8 +264,8 @@ export default function AdminLicenses() {
                     <KeyRound className="w-5 h-5 text-neon-cyan" />
                   </div>
                   <div>
-                    <h2 className="text-base font-bold text-white">Generate New License</h2>
-                    <p className="text-[11px] text-slate-500">Create a unique license key for a subscription plan</p>
+                    <h2 className="text-base font-bold text-white">Generate & Allot License</h2>
+                    <p className="text-[11px] text-slate-500">Select a plan, duration, and generate a unique license key</p>
                   </div>
                 </div>
                 <button onClick={() => setShowGenerate(false)} className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/[0.06]">
@@ -260,11 +277,11 @@ export default function AdminLicenses() {
               <div className="px-5 sm:px-6 py-5 space-y-5">
                 {/* Plan Tier Selection */}
                 <div>
-                  <label className="text-xs text-slate-400 mb-3 block font-semibold">Plan Tier</label>
+                  <label className="text-xs text-slate-400 mb-3 block font-semibold">Select Plan</label>
                   <div className="grid grid-cols-3 gap-3">
-                    {tierConfig.map(tier => {
+                    {licensePlanConfigs.map(tier => {
                       const isSelected = selectedTier === tier.id;
-                      const TIcon = tier.icon;
+                      const TIcon = tierIconMap[tier.id];
                       const colorMap: Record<string, { text: string; bg: string; border: string; glow: string }> = {
                         cyan: { text: 'text-neon-cyan', bg: 'bg-neon-cyan/10', border: 'border-neon-cyan/40', glow: 'hover:neon-glow-cyan' },
                         green: { text: 'text-neon-green', bg: 'bg-neon-green/10', border: 'border-neon-green/40', glow: 'hover:neon-glow-green' },
@@ -285,8 +302,8 @@ export default function AdminLicenses() {
                               <TIcon className={`w-5 h-5 ${isSelected ? a.text : 'text-slate-400'}`} />
                             </div>
                             <p className={`text-sm font-bold ${isSelected ? a.text : 'text-slate-300'}`}>{tier.label}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">{symbol}{tier.price}/mo</p>
-                            <p className="text-[10px] text-slate-600 mt-0.5">{tier.botLimit} bots · {tier.maxLev}x</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">{symbol}{currency === 'INR' ? tier.monthlyPrice * 83 : tier.monthlyPrice}/mo</p>
+                            <p className="text-[10px] text-slate-600 mt-0.5">{tier.botLimit === 25 ? 'Unlimited' : `${tier.botLimit}`} bots · {tier.maxLeverage}x</p>
                           </div>
                         </button>
                       );
@@ -300,9 +317,9 @@ export default function AdminLicenses() {
                     <Clock className="w-3.5 h-3.5" /> Duration
                   </label>
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                    {durationOptions.map(d => (
+                    {licenseDurationOptions.map(d => (
                       <button
-                        key={d.id}
+                        key={d.months}
                         onClick={() => { setSelectedDuration(d.months); setGeneratedKey(null); }}
                         className={`px-2 py-2.5 rounded-lg text-xs font-semibold transition-all ${
                           selectedDuration === d.months
@@ -314,17 +331,74 @@ export default function AdminLicenses() {
                       </button>
                     ))}
                   </div>
-                  {/* Price preview */}
-                  <div className="mt-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
-                    <span className="text-xs text-slate-400">Total cost for {selectedDuration} month{selectedDuration > 1 ? 's' : ''}</span>
-                    {(() => {
-                      const tier = tierConfig.find(t => t.id === selectedTier)!;
-                      return (
-                        <span className="text-sm font-mono font-bold text-neon-cyan">
-                          {symbol}{(tier.price * selectedDuration).toLocaleString()}
-                        </span>
-                      );
-                    })()}
+                </div>
+
+                {/* Editable Amount */}
+                <div>
+                  <label className="text-xs text-slate-400 mb-2 block font-semibold">Total Amount (editable)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan font-bold text-sm">{symbol}</span>
+                    <input
+                      type="number"
+                      value={convertedAmount}
+                      onChange={e => setCustomAmount(currency === 'INR' ? Number(e.target.value) / 83 : Number(e.target.value))}
+                      step="1"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-lg text-white font-mono font-bold focus:outline-none focus:border-neon-cyan/40 transition-colors"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1.5">
+                    Default auto-filled based on plan × duration. Override to apply custom pricing or discounts.
+                    {currency === 'INR' && <span className="text-neon-amber ml-1">(Showing in INR — stored as USD)</span>}
+                  </p>
+                </div>
+
+                {/* SaaS Feature Matrix */}
+                <div className="rounded-2xl border border-white/[0.06] overflow-hidden">
+                  <div className="px-4 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+                    <p className="text-xs font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-neon-cyan" /> SaaS Feature Matrix — {selectedTier} Plan
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Features automatically toggled based on selected plan</p>
+                  </div>
+                  <div className="overflow-x-auto scrollbar-thin">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-white/[0.04] text-[9px] uppercase tracking-wider text-slate-500">
+                          <th className="text-left py-2.5 px-4 font-semibold">Feature</th>
+                          <th className="text-center py-2.5 px-3 font-semibold">Starter</th>
+                          <th className="text-center py-2.5 px-3 font-semibold">Pro</th>
+                          <th className="text-center py-2.5 px-3 font-semibold">Enterprise</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {saasFeatureMatrix.map((feat, i) => {
+                          const getCell = (plan: 'starter' | 'pro' | 'enterprise') => {
+                            const active = feat[plan];
+                            const isCurrentPlan =
+                              (plan === 'starter' && selectedTier === 'Starter') ||
+                              (plan === 'pro' && selectedTier === 'Pro') ||
+                              (plan === 'enterprise' && selectedTier === 'Enterprise');
+                            return (
+                              <td key={plan} className={`text-center py-2.5 px-3 ${isCurrentPlan ? 'bg-neon-cyan/5' : ''}`}>
+                                {active ? (
+                                  <CheckCircle2 className={`w-4 h-4 mx-auto ${isCurrentPlan ? 'text-neon-green' : 'text-slate-500'}`} />
+                                ) : (
+                                  <X className="w-3.5 h-3.5 mx-auto text-slate-700" />
+                                )}
+                              </td>
+                            );
+                          };
+                          return (
+                            <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                              <td className="py-2.5 px-4 text-slate-300 font-medium">{feat.label}</td>
+                              {getCell('starter')}
+                              {getCell('pro')}
+                              {getCell('enterprise')}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 

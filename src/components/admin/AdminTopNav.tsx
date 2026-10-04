@@ -1,4 +1,4 @@
-import { ShieldCheck, Activity, Server, LogOut, User, Bell, DollarSign } from 'lucide-react';
+import { ShieldCheck, Activity, Server, LogOut, User, Bell, DollarSign, IndianRupee, ArrowLeftRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useAdminCurrency } from '@/context/AdminCurrencyContext';
 
@@ -9,7 +9,7 @@ interface Props {
 
 export default function AdminTopNav({ killSwitchActive, onToggleKill }: Props) {
   const { user, signOut } = useAuth();
-  const { currency, setCurrency } = useAdminCurrency();
+  const { currency, toggleCurrency, symbol } = useAdminCurrency();
   const emailPrefix = user?.email?.split('@')[0] ?? 'admin';
 
   return (
@@ -40,7 +40,7 @@ export default function AdminTopNav({ killSwitchActive, onToggleKill }: Props) {
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass">
             <Server className="w-4 h-4 text-neon-cyan" />
-            <span className="text-xs text-slate-300 font-semibold">6 APIs</span>
+            <span className="text-xs text-slate-300 font-semibold">5 APIs</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass">
             <Activity className="w-4 h-4 text-neon-green" />
@@ -50,14 +50,20 @@ export default function AdminTopNav({ killSwitchActive, onToggleKill }: Props) {
 
         {/* Controls */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-          {/* Currency Switcher */}
+          {/* Glowing Currency Toggle Switch */}
           <button
-            onClick={() => setCurrency(currency === 'USDT' ? 'INR' : 'USDT')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass hover:bg-white/[0.06] transition-all duration-200"
-            title="Toggle currency"
+            onClick={toggleCurrency}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl glass hover:bg-white/[0.06] transition-all duration-300 group"
+            title={`Switch to ${currency === 'USD' ? 'INR' : 'USD'}`}
           >
-            <DollarSign className="w-4 h-4 text-neon-amber" />
-            <span className="text-xs font-bold text-neon-amber">{currency}</span>
+            <div className="relative flex items-center gap-1.5">
+              <DollarSign className={`w-4 h-4 transition-all ${currency === 'USD' ? 'text-neon-green scale-110' : 'text-slate-600'}`} style={currency === 'USD' ? { filter: 'drop-shadow(0 0 4px rgba(0,255,157,0.8))' } : {}} />
+              <ArrowLeftRight className="w-3 h-3 text-slate-500 group-hover:text-slate-300 transition-colors" />
+              <IndianRupee className={`w-4 h-4 transition-all ${currency === 'INR' ? 'text-neon-green scale-110' : 'text-slate-600'}`} style={currency === 'INR' ? { filter: 'drop-shadow(0 0 4px rgba(0,255,157,0.8))' } : {}} />
+            </div>
+            <span className="text-xs font-bold text-neon-amber" style={{ textShadow: '0 0 8px rgba(255,176,32,0.5)' }}>
+              {currency === 'USD' ? symbol + 'USD' : symbol + 'INR'}
+            </span>
           </button>
 
           {/* Kill Switch */}

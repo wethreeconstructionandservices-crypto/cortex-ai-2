@@ -1,11 +1,11 @@
 import {
   LayoutDashboard, Bot, Users, KeyRound, ShieldCheck,
-  AlertTriangle, Settings, ChevronRight,
+  AlertTriangle, Settings, ChevronRight, Wallet, SlidersHorizontal,
 } from 'lucide-react';
 
 export type AdminViewId =
   | 'dashboard' | 'bots' | 'clients' | 'licenses'
-  | 'admins' | 'risk-control' | 'system-settings';
+  | 'admins' | 'risk-control' | 'system-settings' | 'payment-analytics' | 'api-control';
 
 interface NavItem {
   id: AdminViewId;
@@ -19,8 +19,10 @@ const navItems: NavItem[] = [
   { id: 'bots', label: 'AI Smart Bots', icon: Bot },
   { id: 'clients', label: 'Clients', icon: Users },
   { id: 'licenses', label: 'Licenses', icon: KeyRound },
+  { id: 'payment-analytics', label: 'Payment & Revenue', icon: Wallet, badge: 'NEW' },
   { id: 'admins', label: 'Admins', icon: ShieldCheck },
   { id: 'risk-control', label: 'Risk Control', icon: AlertTriangle },
+  { id: 'api-control', label: 'Master API Control', icon: SlidersHorizontal, badge: 'NEW' },
   { id: 'system-settings', label: 'System Settings', icon: Settings },
 ];
 
@@ -64,7 +66,7 @@ export default function AdminSidebar({ active, onSelect, onClose }: Props) {
               <Icon className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isActive ? 'text-neon-amber' : 'text-slate-500 group-hover:text-slate-300'}`} />
               <span className="flex-1 text-left">{item.label}</span>
               {item.badge && (
-                <span className="px-1.5 py-0.5 rounded-md bg-neon-red/15 text-neon-red text-[9px] font-bold tracking-wide">
+                <span className="px-1.5 py-0.5 rounded-md bg-neon-green/15 text-neon-green text-[9px] font-bold tracking-wide neon-glow-green">
                   {item.badge}
                 </span>
               )}
@@ -83,7 +85,7 @@ export default function AdminSidebar({ active, onSelect, onClose }: Props) {
           <ChevronRight className="w-4 h-4 rotate-180" />
           Back to Cortex AI
         </button>
-        <p className="text-[10px] text-slate-600 mt-2">Admin Panel v1.0</p>
+        <p className="text-[10px] text-slate-600 mt-2">Admin Panel v2.0</p>
       </div>
     </nav>
   );

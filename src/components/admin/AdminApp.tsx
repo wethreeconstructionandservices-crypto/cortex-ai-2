@@ -13,6 +13,8 @@ import AdminLicenses from '@/views/admin/AdminLicenses';
 import AdminAdmins from '@/views/admin/AdminAdmins';
 import AdminRiskControl from '@/views/admin/AdminRiskControl';
 import AdminSystemSettings from '@/views/admin/AdminSystemSettings';
+import AdminPaymentAnalytics from '@/views/admin/AdminPaymentAnalytics';
+import AdminApiControl from '@/views/admin/AdminApiControl';
 
 const viewTitles: Record<AdminViewId, string> = {
   'dashboard': 'Dashboard',
@@ -22,6 +24,8 @@ const viewTitles: Record<AdminViewId, string> = {
   'admins': 'Admins',
   'risk-control': 'Risk Control',
   'system-settings': 'System Settings',
+  'payment-analytics': 'Payment & Revenue',
+  'api-control': 'Master API Control',
 };
 
 export default function AdminApp() {
@@ -58,6 +62,8 @@ export default function AdminApp() {
       case 'admins': return <AdminAdmins />;
       case 'risk-control': return <AdminRiskControl />;
       case 'system-settings': return <AdminSystemSettings />;
+      case 'payment-analytics': return <AdminPaymentAnalytics />;
+      case 'api-control': return <AdminApiControl />;
       default: return <AdminDashboard />;
     }
   };

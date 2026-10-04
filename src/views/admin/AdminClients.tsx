@@ -3,12 +3,14 @@ import {
   Users, Search, TrendingUp, TrendingDown,
   DollarSign, Bot, Pencil, Trash2, LogIn, X, Check, Zap, Shield,
   Calendar, ChevronDown, ChevronUp, Crown, Sparkles, AlertTriangle, UserCog,
-  KeyRound, ToggleRight, Rocket, Clock, Plus, Minus,
+  KeyRound, ToggleRight, Rocket, Clock, Plus, Minus, Plug,
 } from 'lucide-react';
 import {
-  adminClients, type AdminClient,
+  adminClients, type AdminClient, type ConnectedExchange,
   allStrategies, allIndicators, licenseCycleConfig, type LicenseCycle,
+  indianExchanges,
 } from '@/data/adminMockData';
+
 import { useAdminCurrency } from '@/context/AdminCurrencyContext';
 
 const statusConfig = {
@@ -45,6 +47,7 @@ export default function AdminClients() {
   const [editPlan, setEditPlan] = useState<string>('Starter');
   const [editExpiry, setEditExpiry] = useState('');
   const [extendMonths, setExtendMonths] = useState(0);
+  const [editExchanges, setEditExchanges] = useState<ConnectedExchange[]>([]);
 
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortAsc(!sortAsc);
@@ -71,6 +74,7 @@ export default function AdminClients() {
     setEditPlan(client.plan);
     setEditExpiry(client.licenseValidUntil);
     setExtendMonths(0);
+    setEditExchanges(client.connectedExchanges.map(e => ({ ...e })));
     setModalMode('edit');
   };
 
@@ -120,12 +124,13 @@ export default function AdminClients() {
       base.setMonth(base.getMonth() + extendMonths);
       newExpiry = base.toISOString().split('T')[0];
     }
-    const planBotLimits: Record<string, number> = { Starter: 2, Pro: 8, Enterprise: 25 };
+    const planBotLimits: Record<string, number> = { Starter: 2, Pro: 10, Enterprise: 25 };
     setClients(prev => prev.map(c => c.id === selected.id ? {
       ...c,
       plan: editPlan,
       licenseValidUntil: newExpiry,
       botLimit: planBotLimits[editPlan] ?? c.botLimit,
+      connectedExchanges: editExchanges,
     } : c));
     closeModal();
   };
@@ -190,7 +195,7 @@ export default function AdminClients() {
               <tr className="border-b border-white/[0.06] text-[10px] uppercase tracking-wider text-slate-500">
                 <th className="text-left py-3 px-4 font-semibold">Client Name</th>
                 <th className="text-right py-3 px-4 font-semibold cursor-pointer select-none hover:text-slate-300" onClick={() => toggleSort('totalFunds')}>
-                  <span className="inline-flex items-center gap-1">Total Funds (USDT) {sortField === 'totalFunds' && (sortAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</span>
+                  <span className="inline-flex items-center gap-1">Total Funds {sortField === 'totalFunds' && (sortAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</span>
                 </th>
                 <th className="text-right py-3 px-4 font-semibold cursor-pointer select-none hover:text-slate-300" onClick={() => toggleSort('unrealizedPnl')}>
                   <span className="inline-flex items-center gap-1">Current PnL {sortField === 'unrealizedPnl' && (sortAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</span>
@@ -293,7 +298,7 @@ export default function AdminClients() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { tier: 'Starter', botLimit: 2, color: 'text-neon-cyan', border: 'border-neon-cyan/30', bg: 'bg-neon-cyan/10', strategies: 2, indicators: 2 },
-          { tier: 'Pro', botLimit: 8, color: 'text-neon-green', border: 'border-neon-green/30', bg: 'bg-neon-green/10', strategies: 5, indicators: 4 },
+          { tier: 'Pro', botLimit: 10, color: 'text-neon-green', border: 'border-neon-green/30', bg: 'bg-neon-green/10', strategies: 5, indicators: 4 },
           { tier: 'Enterprise', botLimit: 25, color: 'text-neon-amber', border: 'border-neon-amber/30', bg: 'bg-neon-amber/10', strategies: 7, indicators: 8 },
         ].map(plan => (
           <div key={plan.tier} className={`glass-card p-5 relative overflow-hidden ${plan.border}`}>
@@ -485,6 +490,46 @@ export default function AdminClients() {
                     </div>
                   );
                 })()}
+              </div>
+            </div>
+
+            {/* Connected Exchanges Section */}
+            <div className="pt-2 border-t border-white/[0.06]">
+              <div className="flex items-center gap-2 mb-1">
+                <Plug className="w-4 h-4 text-neon-cyan" />
+                <h3 className="text-sm font-bold text-white">Connected Exchange Control</h3>
+              </div>
+              <p className="text-[11px] text-slate-500 mb-4">Manage which Indian exchange accounts this client can connect to</p>
+              <div className="space-y-2">
+                {indianExchanges.map(name => {
+                  const exState = editExchanges.find(e => e.name === name);
+                  const isConnected = exState?.status === 'connected';
+                  return (
+                    <div key={name} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-white/[0.05] border border-white/[0.06] flex items-center justify-center text-[9px] font-bold text-slate-300 flex-shrink-0">
+                          {name.slice(0, 4).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">{name}</p>
+                          <p className="text-[10px] text-slate-500">{isConnected ? 'Connected' : 'Not connected'}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEditExchanges(prev => prev.map(e =>
+                            e.name === name
+                              ? { ...e, status: e.status === 'connected' ? 'disconnected' : 'connected', apiKeyMasked: e.status === 'connected' ? undefined : '****-****-a8f3' }
+                              : e
+                          ));
+                        }}
+                        className={`relative w-11 h-6 rounded-full transition-all duration-200 ${isConnected ? 'bg-neon-green/30' : 'bg-white/[0.08]'}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-all duration-200 ${isConnected ? 'translate-x-5 bg-neon-green neon-glow-green' : 'bg-slate-500'}`} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
