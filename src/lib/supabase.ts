@@ -139,3 +139,37 @@ export interface BotTemplate {
   active_users: number | null;
   status: 'active' | 'paused' | null;
 }
+
+export interface ApiSettings {
+  id: string;
+  openai_api_key: string | null;
+  anthropic_api_key: string | null;
+  deepseek_api_key: string | null;
+  coingecko_api_key: string | null;
+  coinmarketcap_api_key: string | null;
+  tradingview_license_key: string | null;
+  binance_api_key: string | null;
+  binance_api_secret: string | null;
+  coindcx_api_key: string | null;
+  coindcx_api_secret: string | null;
+  delta_api_key: string | null;
+  delta_api_secret: string | null;
+  wazirx_api_key: string | null;
+  wazirx_api_secret: string | null;
+  pi42_api_key: string | null;
+  pi42_api_secret: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Transaction {
+  id: string;
+  client_name: string;
+  client_email: string | null;
+  plan_name: string;
+  amount: number;
+  currency: string;
+  status: 'completed' | 'pending' | 'failed' | 'refunded';
+  payment_method: string | null;
+  created_at: string;
+}

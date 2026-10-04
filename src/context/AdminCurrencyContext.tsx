@@ -1,23 +1,26 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
-export type AdminCurrency = 'USDT' | 'INR';
+export type AdminCurrency = 'USD' | 'INR';
 
-const USD_TO_INR = 88;
+const USD_TO_INR = 83;
 
 interface AdminCurrencyValue {
   currency: AdminCurrency;
   setCurrency: (c: AdminCurrency) => void;
+  toggleCurrency: () => void;
   convert: (usd: number) => number;
   formatCurrency: (usd: number) => string;
   formatCompact: (usd: number) => string;
+  formatPrice: (usd: number) => string;
   symbol: string;
 }
 
 const AdminCurrencyContext = createContext<AdminCurrencyValue | null>(null);
 
 export function AdminCurrencyProvider({ children }: { children: ReactNode }) {
-  const [currency, setCurrency] = useState<AdminCurrency>('USDT');
+  const [currency, setCurrency] = useState<AdminCurrency>('USD');
 
+  const toggleCurrency = () => setCurrency(prev => prev === 'USD' ? 'INR' : 'USD');
   const convert = (usd: number) => (currency === 'INR' ? usd * USD_TO_INR : usd);
   const symbol = currency === 'INR' ? '₹' : '$';
 
@@ -27,6 +30,14 @@ export function AdminCurrencyProvider({ children }: { children: ReactNode }) {
       return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 });
     }
     return '$' + val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
+
+  const formatPrice = (usd: number) => {
+    const val = convert(usd);
+    if (currency === 'INR') {
+      return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+    }
+    return '$' + val.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
   };
 
   const formatCompact = (usd: number) => {
@@ -43,7 +54,7 @@ export function AdminCurrencyProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AdminCurrencyContext.Provider value={{ currency, setCurrency, convert, formatCurrency, formatCompact, symbol }}>
+    <AdminCurrencyContext.Provider value={{ currency, setCurrency, toggleCurrency, convert, formatCurrency, formatCompact, formatPrice, symbol }}>
       {children}
     </AdminCurrencyContext.Provider>
   );
