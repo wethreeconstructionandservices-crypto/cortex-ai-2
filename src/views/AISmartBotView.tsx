@@ -1,28 +1,67 @@
 import { useState } from 'react';
-import { Bot, Layers, Coins, Crosshair, Shield, DollarSign, Rocket, Zap, TrendingUp, Check, Loader2 } from 'lucide-react';
+import {
+  Bot, Layers, Coins, Crosshair, Shield, DollarSign, Rocket, Zap,
+  TrendingUp, TrendingDown, Check, Loader2, Target, Gauge,
+  Activity, Clock, Settings2, Flame, ArrowRightLeft,
+} from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { coins } from '@/data/mockData';
 import { supabase } from '@/lib/supabase';
 
 type MarketType = 'spot' | 'futures';
+type OrderType = 'market' | 'limit';
 type StrategyCore = 'scalping' | 'grid' | 'trailing';
+type IndicatorTrigger = 'RSI' | 'MACD' | 'EMA Crossover' | 'SMC Order Blocks' | 'Bollinger Bands' | 'Volume Profile';
+type QuantityMode = 'fixed' | 'percent';
+type TpSlMode = 'percentage' | 'fixed';
+
+const indicatorOptions: IndicatorTrigger[] = ['RSI', 'MACD', 'EMA Crossover', 'SMC Order Blocks', 'Bollinger Bands', 'Volume Profile'];
 
 export default function AISmartBotView() {
-  const { formatCurrency, convert, currency } = useApp();
+  const { formatCurrency, currency } = useApp();
 
+  // Existing state
   const [marketType, setMarketType] = useState<MarketType>('spot');
   const [leverage, setLeverage] = useState(10);
   const [selectedCoin, setSelectedCoin] = useState('BTC');
   const [strategyCore, setStrategyCore] = useState<StrategyCore>('scalping');
-  const [takeProfit, setTakeProfit] = useState(5);
-  const [stopLoss, setStopLoss] = useState(2);
   const [capital, setCapital] = useState(5000);
   const [launched, setLaunched] = useState(false);
   const [launching, setLaunching] = useState(false);
 
+  // 1. Entry Logic
+  const [orderType, setOrderType] = useState<OrderType>('market');
+  const [indicator, setIndicator] = useState<IndicatorTrigger>('RSI');
+
+  // 2. Position & Execution
+  const [quantityMode, setQuantityMode] = useState<QuantityMode>('fixed');
+  const [quantityValue, setQuantityValue] = useState(5000);
+  const [percentValue, setPercentValue] = useState(10);
+  const [maxTradesPerDay, setMaxTradesPerDay] = useState(20);
+  const [rrRatio, setRrRatio] = useState(2);
+
+  // 3. Advanced Exit & SL/TP
+  const [tpSlMode, setTpSlMode] = useState<TpSlMode>('percentage');
+  const [takeProfit, setTakeProfit] = useState(5);
+  const [stopLoss, setStopLoss] = useState(2);
+  const [tpFixed, setTpFixed] = useState(100);
+  const [slFixed, setSlFixed] = useState(50);
+  const [trailingEnabled, setTrailingEnabled] = useState(false);
+  const [trailingDistance, setTrailingDistance] = useState(1.5);
+
+  // 4. Daily Safety Limits
+  const [maxDailyLoss, setMaxDailyLoss] = useState(500);
+  const [maxDailyProfit, setMaxDailyProfit] = useState(1000);
+  const [cooldownMinutes, setCooldownMinutes] = useState(15);
+
   const selectedCoinData = coins.find(c => c.symbol === selectedCoin) || coins[0];
-  const positionSize = marketType === 'futures' ? capital * leverage : capital;
+
+  const effectiveCapital = quantityMode === 'fixed' ? quantityValue : (capital * percentValue / 100);
+  const positionSize = marketType === 'futures' ? effectiveCapital * leverage : effectiveCapital;
   const coinAmount = positionSize / selectedCoinData.price;
+
+  const tpDisplay = tpSlMode === 'percentage' ? `+${takeProfit}%` : `+${formatCurrency(tpFixed)}`;
+  const slDisplay = tpSlMode === 'percentage' ? `-${stopLoss}%` : `-${formatCurrency(slFixed)}`;
 
   const handleLaunch = async () => {
     setLaunching(true);
@@ -63,9 +102,9 @@ export default function AISmartBotView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Form - 2 cols */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Market Type */}
-          <Section icon={Layers} title="Market Type" accent="cyan">
-            <div className="grid grid-cols-2 gap-3">
+          {/* Market Type & Coin */}
+          <Section icon={Layers} title="Market & Asset Selection">
+            <div className="grid grid-cols-2 gap-3 mb-4">
               {(['spot', 'futures'] as MarketType[]).map((mt) => (
                 <button
                   key={mt}
@@ -82,45 +121,25 @@ export default function AISmartBotView() {
               ))}
             </div>
 
-            {/* Leverage Slider */}
             {marketType === 'futures' && (
-              <div className="mt-4 animate-slide-up">
+              <div className="mb-4 animate-slide-up">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs text-slate-400">Leverage</span>
                   <span className="text-sm font-bold text-neon-amber font-mono">{leverage}x</span>
                 </div>
-                <div className="relative">
-                  <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={leverage}
-                    onChange={(e) => setLeverage(Number(e.target.value))}
-                    className="w-full h-2 rounded-full appearance-none cursor-pointer slider-neon"
-                    style={{
-                      background: `linear-gradient(to right, #00ff9d 0%, #00e5ff ${leverage}%, #1a1f33 ${leverage}%)`,
-                    }}
-                  />
-                  <div className="flex justify-between mt-1.5 text-[9px] text-slate-600">
-                    <span>1x</span>
-                    <span>25x</span>
-                    <span>50x</span>
-                    <span>75x</span>
-                    <span className={leverage >= 80 ? 'text-neon-red font-bold' : ''}>100x MAX</span>
-                  </div>
+                <input
+                  type="range" min="1" max="100" value={leverage}
+                  onChange={(e) => setLeverage(Number(e.target.value))}
+                  className="w-full h-2 rounded-full appearance-none cursor-pointer slider-neon"
+                  style={{ background: `linear-gradient(to right, #00ff9d 0%, #00e5ff ${leverage}%, #1a1f33 ${leverage}%)` }}
+                />
+                <div className="flex justify-between mt-1.5 text-[9px] text-slate-600">
+                  <span>1x</span><span>25x</span><span>50x</span><span>75x</span>
+                  <span className={leverage >= 80 ? 'text-neon-red font-bold' : ''}>100x MAX</span>
                 </div>
-                {leverage >= 50 && (
-                  <p className="mt-2 text-[11px] text-neon-red/80 flex items-center gap-1">
-                    <Shield className="w-3 h-3" />
-                    High leverage significantly increases liquidation risk.
-                  </p>
-                )}
               </div>
             )}
-          </Section>
 
-          {/* Coin Selector */}
-          <Section icon={Coins} title="Coin Selector" accent="cyan">
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {coins.slice(0, 10).map((c) => (
                 <button
@@ -142,102 +161,295 @@ export default function AISmartBotView() {
             </div>
           </Section>
 
-          {/* Strategy Core */}
-          <Section icon={Crosshair} title="Strategy Core" accent="cyan">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {([
-                { id: 'scalping', label: 'Scalping', desc: 'Quick in/out trades on micro-moves', icon: Zap },
-                { id: 'grid', label: 'Grid', desc: 'Place orders at set intervals', icon: Layers },
-                { id: 'trailing', label: 'Trailing', desc: 'Dynamic stop that follows price', icon: TrendingUp },
-              ] as { id: StrategyCore; label: string; desc: string; icon: typeof Zap }[]).map((s) => {
-                const Icon = s.icon;
-                return (
+          {/* 1. Entry Logic */}
+          <Section icon={Crosshair} title="Entry Logic" badge="01">
+            {/* Order Type */}
+            <div className="mb-5">
+              <label className="text-xs text-slate-400 mb-2 block font-semibold">Order Type</label>
+              <div className="flex gap-2 p-1 rounded-xl bg-base-800/50">
+                <button
+                  onClick={() => setOrderType('market')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    orderType === 'market' ? 'bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" /> Market
+                </button>
+                <button
+                  onClick={() => setOrderType('limit')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    orderType === 'limit' ? 'bg-neon-amber/15 text-neon-amber border border-neon-amber/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Target className="w-4 h-4" /> Limit
+                </button>
+              </div>
+            </div>
+
+            {/* Indicator Trigger */}
+            <div>
+              <label className="text-xs text-slate-400 mb-2 block font-semibold">Technical Indicator Trigger</label>
+              <div className="flex flex-wrap gap-2">
+                {indicatorOptions.map((ind) => (
                   <button
-                    key={s.id}
-                    onClick={() => setStrategyCore(s.id)}
-                    className={`p-3 rounded-xl text-left transition-all duration-200 ${
-                      strategyCore === s.id
-                        ? 'bg-neon-cyan/10 text-white border border-neon-cyan/40'
-                        : 'glass text-slate-400 hover:text-slate-200'
+                    key={ind}
+                    onClick={() => setIndicator(ind)}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      indicator === ind
+                        ? 'bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/40 shadow-[0_0_12px_rgba(0,229,255,0.2)]'
+                        : 'bg-white/[0.03] text-slate-400 border border-white/[0.06] hover:border-white/[0.14] hover:text-slate-200'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 mb-2 ${strategyCore === s.id ? 'text-neon-cyan' : 'text-slate-500'}`} />
-                    <p className="text-sm font-semibold">{s.label}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{s.desc}</p>
+                    <span className="flex items-center gap-1.5">
+                      <div className={`w-2 h-2 rounded-full transition-all ${indicator === ind ? 'bg-neon-cyan shadow-[0_0_6px_rgba(0,229,255,0.8)]' : 'bg-slate-600'}`} />
+                      {ind}
+                    </span>
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
           </Section>
 
-          {/* Risk / Reward */}
-          <Section icon={Shield} title="Risk / Reward Inputs" accent="cyan">
+          {/* 2. Position & Execution */}
+          <Section icon={Gauge} title="Position & Execution" badge="02">
+            {/* Quantity Mode Toggle */}
+            <div className="mb-4">
+              <label className="text-xs text-slate-400 mb-2 block font-semibold">Trade Quantity</label>
+              <div className="flex gap-2 p-1 rounded-xl bg-base-800/50 mb-3">
+                <button
+                  onClick={() => setQuantityMode('fixed')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    quantityMode === 'fixed' ? 'bg-neon-green/15 text-neon-green border border-neon-green/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <DollarSign className="w-3.5 h-3.5" /> Fixed Amount
+                </button>
+                <button
+                  onClick={() => setQuantityMode('percent')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    quantityMode === 'percent' ? 'bg-neon-green/15 text-neon-green border border-neon-green/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5" /> % of Wallet
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={quantityMode === 'fixed' ? quantityValue : percentValue}
+                  onChange={(e) => quantityMode === 'fixed' ? setQuantityValue(Math.max(0, Number(e.target.value))) : setPercentValue(Math.max(0, Math.min(100, Number(e.target.value))))}
+                  className="w-full px-4 py-3 rounded-xl glass text-lg text-white font-mono focus:outline-none focus:border-neon-green/40 transition-colors"
+                  step={quantityMode === 'fixed' ? '100' : '1'}
+                  min="0"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-neon-green font-bold">
+                  {quantityMode === 'fixed' ? currency : '%'}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1.5">
+                {quantityMode === 'fixed'
+                  ? `Each trade uses ${formatCurrency(quantityValue)}`
+                  : `Each trade uses ${percentValue}% of wallet balance`}
+              </p>
+            </div>
+
+            {/* Max Trades Per Day & R:R Ratio */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Take Profit %</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={takeProfit}
-                    onChange={(e) => setTakeProfit(Math.max(0, Number(e.target.value)))}
-                    className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-green/40 transition-colors"
-                    step="0.5"
-                    min="0"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-green text-sm font-bold">%</span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-1">Auto-sell at +{takeProfit}% gain</p>
+                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                  <Activity className="w-3 h-3" /> Max Trades / Day
+                </label>
+                <input
+                  type="number"
+                  value={maxTradesPerDay}
+                  onChange={(e) => setMaxTradesPerDay(Math.max(0, Number(e.target.value)))}
+                  className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-cyan/40 transition-colors"
+                  min="0"
+                />
               </div>
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Stop Loss %</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={stopLoss}
-                    onChange={(e) => setStopLoss(Math.max(0, Number(e.target.value)))}
-                    className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-red/40 transition-colors"
-                    step="0.5"
-                    min="0"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-red text-sm font-bold">%</span>
+                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                  <ArrowRightLeft className="w-3 h-3" /> Risk : Reward Ratio
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-slate-500 font-mono text-center font-bold">
+                    1
+                  </div>
+                  <span className="text-slate-500 font-bold">:</span>
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      value={rrRatio}
+                      onChange={(e) => setRrRatio(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-cyan/40 transition-colors text-center"
+                      step="0.5"
+                      min="0"
+                    />
+                  </div>
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">Auto-sell at -{stopLoss}% loss</p>
               </div>
-            </div>
-            {/* R/R ratio display */}
-            <div className="mt-3 flex items-center gap-2 text-xs">
-              <span className="text-slate-400">Risk/Reward Ratio:</span>
-              <span className={`font-bold font-mono ${takeProfit / (stopLoss || 1) >= 1.5 ? 'text-neon-green' : 'text-neon-amber'}`}>
-                1:{(takeProfit / (stopLoss || 1)).toFixed(2)}
-              </span>
             </div>
           </Section>
 
-          {/* Capital Allocation */}
-          <Section icon={DollarSign} title="Capital Allocation" accent="cyan">
-            <div className="relative">
-              <input
-                type="number"
-                value={capital}
-                onChange={(e) => setCapital(Math.max(0, Number(e.target.value)))}
-                className="w-full px-4 py-3 rounded-xl glass text-lg text-white font-mono focus:outline-none focus:border-neon-green/40 transition-colors"
-                step="100"
-                min="0"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-neon-green font-bold">
-                {currency}
-              </span>
-            </div>
-            <div className="grid grid-cols-4 gap-2 mt-3">
-              {[1000, 5000, 10000, 25000].map((preset) => (
+          {/* 3. Advanced Exit & SL/TP */}
+          <Section icon={Shield} title="Advanced Exit & Stop Loss" badge="03">
+            {/* TP/SL Mode Toggle */}
+            <div className="mb-4">
+              <label className="text-xs text-slate-400 mb-2 block font-semibold">TP / SL Definition Mode</label>
+              <div className="flex gap-2 p-1 rounded-xl bg-base-800/50">
                 <button
-                  key={preset}
-                  onClick={() => setCapital(preset)}
-                  className="px-2 py-1.5 rounded-lg glass text-xs text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-all"
+                  onClick={() => setTpSlMode('percentage')}
+                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    tpSlMode === 'percentage' ? 'bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
                 >
-                  {formatCurrency(preset)}
+                  Percentage / Points
                 </button>
-              ))}
+                <button
+                  onClick={() => setTpSlMode('fixed')}
+                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    tpSlMode === 'fixed' ? 'bg-neon-amber/15 text-neon-amber border border-neon-amber/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Fixed PnL Amount
+                </button>
+              </div>
+            </div>
+
+            {/* TP & SL Inputs */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                  <TrendingUp className="w-3 h-3 text-neon-green" /> Take Profit
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={tpSlMode === 'percentage' ? takeProfit : tpFixed}
+                    onChange={(e) => tpSlMode === 'percentage' ? setTakeProfit(Math.max(0, Number(e.target.value))) : setTpFixed(Math.max(0, Number(e.target.value)))}
+                    className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-green/40 transition-colors"
+                    step={tpSlMode === 'percentage' ? '0.5' : '10'}
+                    min="0"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-green text-sm font-bold">
+                    {tpSlMode === 'percentage' ? '%' : currency}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Auto-sell at profit target</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                  <TrendingDown className="w-3 h-3 text-neon-red" /> Stop Loss
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={tpSlMode === 'percentage' ? stopLoss : slFixed}
+                    onChange={(e) => tpSlMode === 'percentage' ? setStopLoss(Math.max(0, Number(e.target.value))) : setSlFixed(Math.max(0, Number(e.target.value)))}
+                    className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-red/40 transition-colors"
+                    step={tpSlMode === 'percentage' ? '0.5' : '10'}
+                    min="0"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-red text-sm font-bold">
+                    {tpSlMode === 'percentage' ? '%' : currency}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Auto-sell at loss limit</p>
+              </div>
+            </div>
+
+            {/* Trailing Stop Loss */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-neon-cyan" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Trailing Stop Loss</p>
+                    <p className="text-[10px] text-slate-500">Dynamically follows price upward</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setTrailingEnabled(!trailingEnabled)}
+                  className={`relative w-12 h-6 rounded-full transition-all duration-200 ${trailingEnabled ? 'bg-neon-cyan/30' : 'bg-white/[0.08]'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-all duration-200 ${trailingEnabled ? 'translate-x-6 bg-neon-cyan neon-glow-cyan' : 'bg-slate-500'}`} />
+                </button>
+              </div>
+              {trailingEnabled && (
+                <div className="animate-slide-up">
+                  <label className="text-xs text-slate-400 mb-1.5 block font-semibold">Trailing Distance (%)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={trailingDistance}
+                      onChange={(e) => setTrailingDistance(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-cyan/40 transition-colors"
+                      step="0.1"
+                      min="0"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-cyan text-sm font-bold">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1.5">Stop loss trails price by {trailingDistance}% — locks in profit while limiting downside.</p>
+                </div>
+              )}
+            </div>
+          </Section>
+
+          {/* 4. Daily Safety Limits */}
+          <Section icon={Shield} title="Daily Safety Limits" badge="04">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                  <Flame className="w-3 h-3 text-neon-red" /> Max Daily Loss
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={maxDailyLoss}
+                    onChange={(e) => setMaxDailyLoss(Math.max(0, Number(e.target.value)))}
+                    className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-red/40 transition-colors"
+                    step="50"
+                    min="0"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-red text-sm font-bold">{currency}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Bot auto-pauses if daily loss hits this</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                  <Target className="w-3 h-3 text-neon-green" /> Max Daily Profit
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={maxDailyProfit}
+                    onChange={(e) => setMaxDailyProfit(Math.max(0, Number(e.target.value)))}
+                    className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-green/40 transition-colors"
+                    step="50"
+                    min="0"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-green text-sm font-bold">{currency}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Bot auto-pauses if daily profit hits this</p>
+              </div>
+            </div>
+
+            {/* Cooldown Timer */}
+            <div>
+              <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-neon-amber" /> Cooldown Timer (after SL hit)
+              </label>
+              <div className="relative max-w-[200px]">
+                <input
+                  type="number"
+                  value={cooldownMinutes}
+                  onChange={(e) => setCooldownMinutes(Math.max(0, Number(e.target.value)))}
+                  className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-amber/40 transition-colors"
+                  min="0"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neon-amber text-sm font-bold">min</span>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1.5">Bot pauses for {cooldownMinutes} minute{cooldownMinutes !== 1 ? 's' : ''} after a stop-loss trigger before resuming.</p>
             </div>
           </Section>
         </div>
@@ -251,16 +463,40 @@ export default function AISmartBotView() {
             </h3>
 
             <div className="space-y-3 text-sm">
+              {/* Market & Asset */}
+              <SummaryGroup label="Market & Asset" />
               <SummaryRow label="Market" value={marketType.toUpperCase()} />
               {marketType === 'futures' && (
                 <SummaryRow label="Leverage" value={`${leverage}x`} accent="amber" />
               )}
               <SummaryRow label="Coin" value={selectedCoin} />
               <SummaryRow label="Strategy" value={strategyCore.charAt(0).toUpperCase() + strategyCore.slice(1)} />
-              <SummaryRow label="Take Profit" value={`+${takeProfit}%`} accent="green" />
-              <SummaryRow label="Stop Loss" value={`-${stopLoss}%`} accent="red" />
-              <SummaryRow label="Capital" value={formatCurrency(capital)} />
+
+              {/* Entry Logic */}
+              <SummaryGroup label="Entry Logic" />
+              <SummaryRow label="Order Type" value={orderType.charAt(0).toUpperCase() + orderType.slice(1)} accent={orderType === 'market' ? 'cyan' : 'amber'} />
+              <SummaryRow label="Indicator" value={indicator} accent="cyan" />
+
+              {/* Position & Execution */}
+              <SummaryGroup label="Position & Execution" />
+              <SummaryRow label="Quantity" value={quantityMode === 'fixed' ? formatCurrency(quantityValue) : `${percentValue}% of wallet`} />
+              <SummaryRow label="Max Trades/Day" value={`${maxTradesPerDay}`} />
+              <SummaryRow label="R:R Ratio" value={`1:${rrRatio}`} accent="cyan" />
+
+              {/* Exit & SL/TP */}
+              <SummaryGroup label="Exit & SL/TP" />
+              <SummaryRow label="Take Profit" value={tpDisplay} accent="green" />
+              <SummaryRow label="Stop Loss" value={slDisplay} accent="red" />
+              <SummaryRow label="Trailing SL" value={trailingEnabled ? `ON · ${trailingDistance}%` : 'OFF'} accent={trailingEnabled ? 'cyan' : undefined} />
+
+              {/* Safety Limits */}
+              <SummaryGroup label="Daily Safety" />
+              <SummaryRow label="Max Daily Loss" value={formatCurrency(maxDailyLoss)} accent="red" />
+              <SummaryRow label="Max Daily Profit" value={formatCurrency(maxDailyProfit)} accent="green" />
+              <SummaryRow label="Cooldown" value={`${cooldownMinutes}m`} accent="amber" />
+
               <div className="h-px bg-white/[0.06] my-3" />
+              <SummaryRow label="Trade Capital" value={formatCurrency(effectiveCapital)} />
               <SummaryRow label="Position Size" value={formatCurrency(positionSize)} accent="cyan" bold />
               <SummaryRow label="Coin Amount" value={`${coinAmount.toFixed(6)} ${selectedCoin}`} />
             </div>
@@ -268,30 +504,21 @@ export default function AISmartBotView() {
             {/* Launch button */}
             <button
               onClick={handleLaunch}
-              disabled={capital <= 0 || launching}
+              disabled={effectiveCapital <= 0 || launching}
               className={`mt-5 w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all duration-300 ${
                 launched
                   ? 'bg-neon-green/20 text-neon-green border border-neon-green/50 neon-glow-green'
-                  : capital <= 0 || launching
+                  : effectiveCapital <= 0 || launching
                   ? 'bg-white/[0.03] text-slate-500 border border-white/[0.06] cursor-not-allowed'
                   : 'bg-gradient-to-r from-neon-cyan/20 to-neon-green/20 text-white border border-neon-cyan/40 hover:from-neon-cyan/30 hover:to-neon-green/30 neon-glow-cyan hover:scale-[1.02]'
               }`}
             >
               {launching ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Launching...
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Launching...</>
               ) : launched ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  Bot Launched!
-                </>
+                <><Check className="w-4 h-4" /> Bot Launched!</>
               ) : (
-                <>
-                  <Rocket className="w-4 h-4" />
-                  Launch Custom Cortex Bot
-                </>
+                <><Rocket className="w-4 h-4" /> Launch Custom Cortex Bot</>
               )}
             </button>
 
@@ -307,14 +534,29 @@ export default function AISmartBotView() {
   );
 }
 
-function Section({ icon: Icon, title, children, accent: _accent }: { icon: typeof Layers; title: string; children: React.ReactNode; accent?: string }) {
+function Section({ icon: Icon, title, children, badge }: { icon: typeof Layers; title: string; children: React.ReactNode; badge?: string }) {
   return (
-    <div className="glass-card p-5">
-      <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-        <Icon className="w-4 h-4 text-neon-cyan" />
-        {title}
-      </h3>
+    <div className="glass-card p-5 relative">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Icon className="w-4 h-4 text-neon-cyan" />
+          {title}
+        </h3>
+        {badge && (
+          <span className="px-2 py-0.5 rounded-md bg-neon-cyan/10 text-neon-cyan text-[9px] font-bold border border-neon-cyan/20">
+            {badge}
+          </span>
+        )}
+      </div>
       {children}
+    </div>
+  );
+}
+
+function SummaryGroup({ label }: { label: string }) {
+  return (
+    <div className="pt-2">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600">{label}</p>
     </div>
   );
 }
@@ -323,8 +565,8 @@ function SummaryRow({ label, value, accent, bold }: { label: string; value: stri
   const color = accent === 'green' ? 'text-neon-green' : accent === 'red' ? 'text-neon-red' : accent === 'amber' ? 'text-neon-amber' : accent === 'cyan' ? 'text-neon-cyan' : 'text-slate-200';
   return (
     <div className="flex items-center justify-between">
-      <span className="text-slate-400">{label}</span>
-      <span className={`${color} ${bold ? 'font-bold' : 'font-medium'} font-mono`}>{value}</span>
+      <span className="text-slate-400 text-xs">{label}</span>
+      <span className={`${color} ${bold ? 'font-bold' : 'font-medium'} font-mono text-xs`}>{value}</span>
     </div>
   );
 }
