@@ -3,12 +3,11 @@ import { Plug, Check, Zap, Loader2, Trash2, KeyRound } from 'lucide-react';
 import { supabase, type BrokerKey } from '@/lib/supabase';
 
 const brokerCatalog = [
-  { name: 'Binance', logo: 'BNB', desc: 'World\'s largest crypto exchange', features: ['Spot & Futures', 'Low fees', 'High liquidity'] },
-  { name: 'Bybit', logo: 'BYB', desc: 'Derivatives-focused exchange', features: ['Up to 100x leverage', 'Advanced charts', 'Copy trading'] },
-  { name: 'OKX', logo: 'OKX', desc: 'Comprehensive crypto platform', features: ['Spot & Derivatives', 'DeFi integration', 'Low fees'] },
-  { name: 'KuCoin', logo: 'KUC', desc: 'Global crypto exchange', features: ['Wide coin selection', 'Trading bots', 'Staking rewards'] },
-  { name: 'Coinbase Pro', logo: 'CBP', desc: 'US-regulated exchange', features: ['High security', 'Regulated', 'Institutional grade'] },
-  { name: 'Kraken', logo: 'KRK', desc: 'Veteran crypto exchange', features: ['Fiat support', 'Low fees', 'Staking'] },
+  { name: 'Binance', logo: 'BIN', desc: 'World\'s largest crypto exchange with deep INR pairs', features: ['Spot & Futures', 'Low fees', 'High liquidity', 'P2P INR support'] },
+  { name: 'CoinDCX', logo: 'CDX', desc: 'India\'s most popular crypto investment app', features: ['INR deposits via UPI', '200+ coins', 'Simple & Pro mode', 'FIU-IND registered'] },
+  { name: 'Delta Exchange', logo: 'DLT', desc: 'Leading crypto derivatives exchange for India', features: ['Up to 100x leverage', 'Options trading', 'Low fees', 'INR deposits'] },
+  { name: 'WazirX', logo: 'WRX', desc: 'India\'s fast-growing crypto exchange', features: ['Fast INR deposits', 'WRX token', 'Spot trading', 'Binance-backed'] },
+  { name: 'Pi42', logo: 'P42', desc: 'India-first crypto futures exchange', features: ['INR-settled futures', 'No conversion needed', 'Low trading fees', 'Seamless UPI'] },
 ];
 
 export default function ConnectBrokerView() {
