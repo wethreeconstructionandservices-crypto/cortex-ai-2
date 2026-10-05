@@ -2,7 +2,8 @@ import { useState } from 'react';
 import {
   Bot, Layers, Coins, Crosshair, Shield, DollarSign, Rocket, Zap,
   TrendingUp, TrendingDown, Check, Loader2, Target, Gauge,
-  Activity, Clock, Settings2, Flame, ArrowRightLeft,
+  Activity, Clock, Flame, ArrowRightLeft, CircuitBoard,
+  Copy, Grid3x3, PiggyBank, ArrowDownRight, ArrowUpRight, Power,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { coins } from '@/data/mockData';
@@ -10,37 +11,47 @@ import { supabase } from '@/lib/supabase';
 
 type MarketType = 'spot' | 'futures';
 type OrderType = 'market' | 'limit';
-type StrategyCore = 'scalping' | 'grid' | 'trailing';
-type IndicatorTrigger = 'RSI' | 'MACD' | 'EMA Crossover' | 'SMC Order Blocks' | 'Bollinger Bands' | 'Volume Profile';
+type TradeDirection = 'long' | 'short';
+type BotType = 'scalper' | 'dca' | 'grid' | 'copier';
+type IndicatorTrigger = 'RSI' | 'MACD' | 'EMA Crossover' | 'SMC Order Blocks' | 'None';
 type QuantityMode = 'fixed' | 'percent';
 type TpSlMode = 'percentage' | 'fixed';
 
-const indicatorOptions: IndicatorTrigger[] = ['RSI', 'MACD', 'EMA Crossover', 'SMC Order Blocks', 'Bollinger Bands', 'Volume Profile'];
+const indicatorOptions: IndicatorTrigger[] = ['RSI', 'MACD', 'EMA Crossover', 'SMC Order Blocks', 'None'];
+
+const botTypeCards: { id: BotType; label: string; desc: string; icon: typeof Zap }[] = [
+  { id: 'scalper', label: 'Scalper', desc: 'Quick in/out trades on micro price movements', icon: Zap },
+  { id: 'dca', label: 'DCA', desc: 'Dollar-cost average into positions over time', icon: PiggyBank },
+  { id: 'grid', label: 'Grid', desc: 'Place buy/sell orders at set price intervals', icon: Grid3x3 },
+  { id: 'copier', label: 'Copier', desc: 'Mirror trades from a signal or master account', icon: Copy },
+];
 
 export default function AISmartBotView() {
   const { formatCurrency, currency } = useApp();
 
-  // Existing state
+  // Market & Asset
   const [marketType, setMarketType] = useState<MarketType>('spot');
   const [leverage, setLeverage] = useState(10);
   const [selectedCoin, setSelectedCoin] = useState('BTC');
-  const [strategyCore, setStrategyCore] = useState<StrategyCore>('scalping');
+  const [botType, setBotType] = useState<BotType>('scalper');
+  const [tradeDirection, setTradeDirection] = useState<TradeDirection>('long');
   const [capital, setCapital] = useState(5000);
   const [launched, setLaunched] = useState(false);
   const [launching, setLaunching] = useState(false);
 
-  // 1. Entry Logic
+  // Entry Logic
   const [orderType, setOrderType] = useState<OrderType>('market');
+  const [indicatorsEnabled, setIndicatorsEnabled] = useState(false);
   const [indicator, setIndicator] = useState<IndicatorTrigger>('RSI');
 
-  // 2. Position & Execution
+  // Position & Execution
   const [quantityMode, setQuantityMode] = useState<QuantityMode>('fixed');
   const [quantityValue, setQuantityValue] = useState(5000);
   const [percentValue, setPercentValue] = useState(10);
   const [maxTradesPerDay, setMaxTradesPerDay] = useState(20);
   const [rrRatio, setRrRatio] = useState(2);
 
-  // 3. Advanced Exit & SL/TP
+  // Advanced Exit & SL/TP
   const [tpSlMode, setTpSlMode] = useState<TpSlMode>('percentage');
   const [takeProfit, setTakeProfit] = useState(5);
   const [stopLoss, setStopLoss] = useState(2);
@@ -49,7 +60,7 @@ export default function AISmartBotView() {
   const [trailingEnabled, setTrailingEnabled] = useState(false);
   const [trailingDistance, setTrailingDistance] = useState(1.5);
 
-  // 4. Daily Safety Limits
+  // Daily Safety Limits
   const [maxDailyLoss, setMaxDailyLoss] = useState(500);
   const [maxDailyProfit, setMaxDailyProfit] = useState(1000);
   const [cooldownMinutes, setCooldownMinutes] = useState(15);
@@ -65,12 +76,12 @@ export default function AISmartBotView() {
 
   const handleLaunch = async () => {
     setLaunching(true);
-    const botName = `Custom Cortex Bot — ${selectedCoin} ${strategyCore.charAt(0).toUpperCase() + strategyCore.slice(1)}`;
+    const botName = `Custom Cortex Bot — ${selectedCoin} ${botType.charAt(0).toUpperCase() + botType.slice(1)}`;
     const { error } = await supabase.from('bots').insert({
       name: botName,
       market_type: marketType,
       coin: selectedCoin,
-      strategy: strategyCore,
+      strategy: botType,
       status: 'running',
       profit_loss: 0,
     });
@@ -93,34 +104,95 @@ export default function AISmartBotView() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-white">AI Smart Bot Builder</h2>
-            <span className="px-2 py-0.5 rounded-md bg-neon-green/15 text-neon-green text-[10px] font-bold neon-glow-green">NEW</span>
+            <span className="px-2 py-0.5 rounded-md bg-neon-green/15 text-neon-green text-[10px] font-bold neon-glow-green">ULTIMATE</span>
           </div>
-          <p className="text-sm text-slate-400">Design and launch your custom AI-powered trading bot</p>
+          <p className="text-sm text-slate-400">Design and launch your custom AI-powered algorithmic trading bot</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Form - 2 cols */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Market Type & Coin */}
-          <Section icon={Layers} title="Market & Asset Selection">
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {(['spot', 'futures'] as MarketType[]).map((mt) => (
+
+          {/* 1. Bot Type Selection */}
+          <Section icon={CircuitBoard} title="Bot Type Selection" badge="01">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {botTypeCards.map((bt) => {
+                const Icon = bt.icon;
+                const active = botType === bt.id;
+                return (
+                  <button
+                    key={bt.id}
+                    onClick={() => setBotType(bt.id)}
+                    className={`p-4 rounded-xl text-left transition-all duration-200 relative overflow-hidden group ${
+                      active
+                        ? 'bg-neon-cyan/10 text-white border border-neon-cyan/40 neon-glow-cyan'
+                        : 'glass text-slate-400 hover:text-slate-200 hover:border-white/[0.12]'
+                    }`}
+                  >
+                    {active && <div className="absolute -top-6 -right-6 w-20 h-20 bg-neon-cyan/10 rounded-full blur-2xl" />}
+                    <div className="relative">
+                      <Icon className={`w-5 h-5 mb-2 ${active ? 'text-neon-cyan' : 'text-slate-500'}`} />
+                      <p className="text-sm font-bold">{bt.label}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{bt.desc}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* 2. Trade Direction & Market */}
+          <Section icon={Layers} title="Trade Direction & Market" badge="02">
+            {/* Trade Direction Toggle */}
+            <div className="mb-5">
+              <label className="text-xs text-slate-400 mb-2 block font-semibold">Trade Direction</label>
+              <div className="flex gap-2 p-1 rounded-xl bg-base-800/50">
                 <button
-                  key={mt}
-                  onClick={() => setMarketType(mt)}
-                  className={`px-4 py-3 rounded-xl text-sm font-semibold capitalize transition-all duration-200 ${
-                    marketType === mt
-                      ? 'bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/40 neon-glow-cyan'
-                      : 'glass text-slate-400 hover:text-slate-200'
+                  onClick={() => setTradeDirection('long')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-bold transition-all ${
+                    tradeDirection === 'long'
+                      ? 'bg-neon-green/15 text-neon-green border border-neon-green/30 shadow-[0_0_12px_rgba(0,255,157,0.2)]'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {mt}
-                  {mt === 'futures' && <span className="block text-[10px] mt-0.5 opacity-70">Up to 100x leverage</span>}
+                  <ArrowUpRight className="w-4 h-4" /> Long (Buy)
                 </button>
-              ))}
+                <button
+                  onClick={() => setTradeDirection('short')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-bold transition-all ${
+                    tradeDirection === 'short'
+                      ? 'bg-neon-red/15 text-neon-red border border-neon-red/30 shadow-[0_0_12px_rgba(255,68,68,0.2)]'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <ArrowDownRight className="w-4 h-4" /> Short (Sell)
+                </button>
+              </div>
             </div>
 
+            {/* Market Type Toggle */}
+            <div className="mb-4">
+              <label className="text-xs text-slate-400 mb-2 block font-semibold">Market Type</label>
+              <div className="grid grid-cols-2 gap-3">
+                {(['spot', 'futures'] as MarketType[]).map((mt) => (
+                  <button
+                    key={mt}
+                    onClick={() => setMarketType(mt)}
+                    className={`px-4 py-3 rounded-xl text-sm font-semibold capitalize transition-all duration-200 ${
+                      marketType === mt
+                        ? 'bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/40'
+                        : 'glass text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {mt}
+                    {mt === 'futures' && <span className="block text-[10px] mt-0.5 opacity-70">Up to 100x leverage</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Leverage Slider */}
             {marketType === 'futures' && (
               <div className="mb-4 animate-slide-up">
                 <div className="flex items-center justify-between mb-2">
@@ -137,32 +209,42 @@ export default function AISmartBotView() {
                   <span>1x</span><span>25x</span><span>50x</span><span>75x</span>
                   <span className={leverage >= 80 ? 'text-neon-red font-bold' : ''}>100x MAX</span>
                 </div>
+                {leverage >= 50 && (
+                  <p className="mt-2 text-[11px] text-neon-red/80 flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    High leverage significantly increases liquidation risk.
+                  </p>
+                )}
               </div>
             )}
 
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {coins.slice(0, 10).map((c) => (
-                <button
-                  key={c.symbol}
-                  onClick={() => setSelectedCoin(c.symbol)}
-                  className={`px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                    selectedCoin === c.symbol
-                      ? 'bg-neon-green/15 text-neon-green border border-neon-green/40'
-                      : 'glass text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {c.symbol}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <span className="text-slate-400">{selectedCoinData.name}</span>
-              <span className="font-mono text-slate-200">${selectedCoinData.price.toLocaleString()}</span>
+            {/* Coin Selector */}
+            <div>
+              <label className="text-xs text-slate-400 mb-2 block font-semibold">Coin Selector</label>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {coins.slice(0, 10).map((c) => (
+                  <button
+                    key={c.symbol}
+                    onClick={() => setSelectedCoin(c.symbol)}
+                    className={`px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                      selectedCoin === c.symbol
+                        ? 'bg-neon-green/15 text-neon-green border border-neon-green/40'
+                        : 'glass text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {c.symbol}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <span className="text-slate-400">{selectedCoinData.name}</span>
+                <span className="font-mono text-slate-200">${selectedCoinData.price.toLocaleString()}</span>
+              </div>
             </div>
           </Section>
 
-          {/* 1. Entry Logic */}
-          <Section icon={Crosshair} title="Entry Logic" badge="01">
+          {/* 3. Entry Logic */}
+          <Section icon={Crosshair} title="Entry Logic" badge="03">
             {/* Order Type */}
             <div className="mb-5">
               <label className="text-xs text-slate-400 mb-2 block font-semibold">Order Type</label>
@@ -186,32 +268,59 @@ export default function AISmartBotView() {
               </div>
             </div>
 
-            {/* Indicator Trigger */}
-            <div>
-              <label className="text-xs text-slate-400 mb-2 block font-semibold">Technical Indicator Trigger</label>
-              <div className="flex flex-wrap gap-2">
-                {indicatorOptions.map((ind) => (
-                  <button
-                    key={ind}
-                    onClick={() => setIndicator(ind)}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                      indicator === ind
-                        ? 'bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/40 shadow-[0_0_12px_rgba(0,229,255,0.2)]'
-                        : 'bg-white/[0.03] text-slate-400 border border-white/[0.06] hover:border-white/[0.14] hover:text-slate-200'
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <div className={`w-2 h-2 rounded-full transition-all ${indicator === ind ? 'bg-neon-cyan shadow-[0_0_6px_rgba(0,229,255,0.8)]' : 'bg-slate-600'}`} />
-                      {ind}
-                    </span>
-                  </button>
-                ))}
+            {/* Technical Indicators Toggle */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CircuitBoard className="w-4 h-4 text-neon-cyan" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Use Technical Indicators</p>
+                    <p className="text-[10px] text-slate-500">Trigger entries based on TA signals</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIndicatorsEnabled(!indicatorsEnabled)}
+                  className={`relative w-12 h-6 rounded-full transition-all duration-200 ${indicatorsEnabled ? 'bg-neon-cyan/30' : 'bg-white/[0.08]'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-all duration-200 ${indicatorsEnabled ? 'translate-x-6 bg-neon-cyan neon-glow-cyan' : 'bg-slate-500'}`} />
+                </button>
               </div>
+
+              {indicatorsEnabled ? (
+                <div className="animate-slide-up">
+                  <label className="text-xs text-slate-400 mb-2 block font-semibold">Select Indicator Trigger</label>
+                  <div className="flex flex-wrap gap-2">
+                    {indicatorOptions.map((ind) => (
+                      <button
+                        key={ind}
+                        onClick={() => setIndicator(ind)}
+                        className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                          indicator === ind
+                            ? 'bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/40 shadow-[0_0_12px_rgba(0,229,255,0.2)]'
+                            : 'bg-white/[0.03] text-slate-400 border border-white/[0.06] hover:border-white/[0.14] hover:text-slate-200'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <div className={`w-2 h-2 rounded-full transition-all ${indicator === ind ? 'bg-neon-cyan shadow-[0_0_6px_rgba(0,229,255,0.8)]' : 'bg-slate-600'}`} />
+                          {ind}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="animate-fade-in flex items-center gap-2 py-2">
+                  <Power className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" />
+                  <p className="text-xs text-slate-500 italic">
+                    Bot will execute based on selected strategy, pure price action, or manual triggers.
+                  </p>
+                </div>
+              )}
             </div>
           </Section>
 
-          {/* 2. Position & Execution */}
-          <Section icon={Gauge} title="Position & Execution" badge="02">
+          {/* 4. Position & Execution */}
+          <Section icon={Gauge} title="Position & Execution" badge="04">
             {/* Quantity Mode Toggle */}
             <div className="mb-4">
               <label className="text-xs text-slate-400 mb-2 block font-semibold">Trade Quantity</label>
@@ -253,20 +362,8 @@ export default function AISmartBotView() {
               </p>
             </div>
 
-            {/* Max Trades Per Day & R:R Ratio */}
+            {/* R:R Ratio & Max Trades Per Day */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
-                  <Activity className="w-3 h-3" /> Max Trades / Day
-                </label>
-                <input
-                  type="number"
-                  value={maxTradesPerDay}
-                  onChange={(e) => setMaxTradesPerDay(Math.max(0, Number(e.target.value)))}
-                  className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-cyan/40 transition-colors"
-                  min="0"
-                />
-              </div>
               <div>
                 <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
                   <ArrowRightLeft className="w-3 h-3" /> Risk : Reward Ratio
@@ -288,11 +385,23 @@ export default function AISmartBotView() {
                   </div>
                 </div>
               </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
+                  <Activity className="w-3 h-3" /> Max Trades / Day
+                </label>
+                <input
+                  type="number"
+                  value={maxTradesPerDay}
+                  onChange={(e) => setMaxTradesPerDay(Math.max(0, Number(e.target.value)))}
+                  className="w-full px-4 py-2.5 rounded-xl glass text-sm text-white font-mono focus:outline-none focus:border-neon-cyan/40 transition-colors"
+                  min="0"
+                />
+              </div>
             </div>
           </Section>
 
-          {/* 3. Advanced Exit & SL/TP */}
-          <Section icon={Shield} title="Advanced Exit & Stop Loss" badge="03">
+          {/* 5. Advanced Exit & SL/TP */}
+          <Section icon={Shield} title="Advanced Exit & Stop Loss" badge="05">
             {/* TP/SL Mode Toggle */}
             <div className="mb-4">
               <label className="text-xs text-slate-400 mb-2 block font-semibold">TP / SL Definition Mode</label>
@@ -395,8 +504,8 @@ export default function AISmartBotView() {
             </div>
           </Section>
 
-          {/* 4. Daily Safety Limits */}
-          <Section icon={Shield} title="Daily Safety Limits" badge="04">
+          {/* 6. Daily Safety Limits */}
+          <Section icon={Shield} title="Daily Safety Limits" badge="06">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="text-xs text-slate-400 mb-2 block font-semibold flex items-center gap-1.5">
@@ -463,25 +572,29 @@ export default function AISmartBotView() {
             </h3>
 
             <div className="space-y-3 text-sm">
-              {/* Market & Asset */}
-              <SummaryGroup label="Market & Asset" />
+              {/* Bot Type */}
+              <SummaryGroup label="Bot Type" />
+              <SummaryRow label="Strategy" value={botType.charAt(0).toUpperCase() + botType.slice(1)} accent="cyan" />
+
+              {/* Direction & Market */}
+              <SummaryGroup label="Direction & Market" />
+              <SummaryRow label="Direction" value={tradeDirection === 'long' ? 'Long (Buy)' : 'Short (Sell)'} accent={tradeDirection === 'long' ? 'green' : 'red'} />
               <SummaryRow label="Market" value={marketType.toUpperCase()} />
               {marketType === 'futures' && (
                 <SummaryRow label="Leverage" value={`${leverage}x`} accent="amber" />
               )}
               <SummaryRow label="Coin" value={selectedCoin} />
-              <SummaryRow label="Strategy" value={strategyCore.charAt(0).toUpperCase() + strategyCore.slice(1)} />
 
               {/* Entry Logic */}
               <SummaryGroup label="Entry Logic" />
               <SummaryRow label="Order Type" value={orderType.charAt(0).toUpperCase() + orderType.slice(1)} accent={orderType === 'market' ? 'cyan' : 'amber'} />
-              <SummaryRow label="Indicator" value={indicator} accent="cyan" />
+              <SummaryRow label="Indicators" value={indicatorsEnabled ? indicator : 'Price Action'} accent={indicatorsEnabled ? 'cyan' : undefined} />
 
               {/* Position & Execution */}
               <SummaryGroup label="Position & Execution" />
               <SummaryRow label="Quantity" value={quantityMode === 'fixed' ? formatCurrency(quantityValue) : `${percentValue}% of wallet`} />
-              <SummaryRow label="Max Trades/Day" value={`${maxTradesPerDay}`} />
               <SummaryRow label="R:R Ratio" value={`1:${rrRatio}`} accent="cyan" />
+              <SummaryRow label="Max Trades/Day" value={`${maxTradesPerDay}`} />
 
               {/* Exit & SL/TP */}
               <SummaryGroup label="Exit & SL/TP" />
